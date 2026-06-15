@@ -10,17 +10,46 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:sleep_sounds/main.dart';
 
+Future<void> _ensureVisibleText(WidgetTester tester, String text) async {
+  final finder = find.text(text);
+  if (finder.evaluate().isNotEmpty) {
+    return;
+  }
+
+  final scrollable = find.byType(ListView);
+  for (var i = 0; i < 8; i++) {
+    await tester.drag(scrollable, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    if (finder.evaluate().isNotEmpty) {
+      return;
+    }
+  }
+}
+
 void main() {
   testWidgets('Sleep sounds renders core tracks', (WidgetTester tester) async {
     await tester.pumpWidget(const SleepSoundsApp());
 
     expect(find.text('Sleep Sounds'), findsOneWidget);
+    expect(find.text('Presets'), findsOneWidget);
+    expect(find.text('Sleep Timer'), findsOneWidget);
+    expect(find.text('Baby'), findsOneWidget);
+    expect(find.text('Study'), findsOneWidget);
+    expect(find.text('Meditation'), findsOneWidget);
+
+    await _ensureVisibleText(tester, 'Rain');
     expect(find.text('Rain'), findsOneWidget);
+
+    await _ensureVisibleText(tester, 'Ocean');
     expect(find.text('Ocean'), findsOneWidget);
+
+    await _ensureVisibleText(tester, 'Forest');
     expect(find.text('Forest'), findsOneWidget);
+
+    await _ensureVisibleText(tester, 'Fan');
     expect(find.text('Fan'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(0, -500));
-    await tester.pumpAndSettle();
+
+    await _ensureVisibleText(tester, 'White Noise');
     expect(find.text('White Noise'), findsOneWidget);
   });
 }

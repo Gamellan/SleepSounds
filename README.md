@@ -13,6 +13,17 @@ Included sounds (packaged inside app):
 - Fan
 - White Noise
 
+## Features (Iteration 2)
+
+- Independent play/pause and volume per sound
+- Mix presets:
+	- Baby
+	- Study
+	- Meditation
+- Sleep timer (15m / 30m / 60m)
+- Automatic fade-out in the last 20 seconds before timer stop
+- Background playback configured for mobile audio sessions
+
 ## Architecture
 
 - No backend
