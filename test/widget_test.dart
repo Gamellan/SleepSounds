@@ -19,7 +19,7 @@ Future<void> _ensureVisibleText(WidgetTester tester, String text) async {
   final scrollable = find.byType(ListView);
   for (var i = 0; i < 8; i++) {
     await tester.drag(scrollable, const Offset(0, -300));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 250));
     if (finder.evaluate().isNotEmpty) {
       return;
     }
@@ -31,8 +31,12 @@ void main() {
     await tester.pumpWidget(const SleepSoundsApp());
 
     expect(find.text('Sleep Sounds'), findsOneWidget);
+    expect(find.text('Theme'), findsOneWidget);
     expect(find.text('Presets'), findsOneWidget);
     expect(find.text('Sleep Timer'), findsOneWidget);
+    expect(find.text('Aurora'), findsOneWidget);
+    expect(find.text('Sunset'), findsOneWidget);
+    expect(find.text('Forest Night'), findsOneWidget);
     expect(find.text('Baby'), findsOneWidget);
     expect(find.text('Study'), findsOneWidget);
     expect(find.text('Meditation'), findsOneWidget);

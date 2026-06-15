@@ -13,14 +13,12 @@ class SleepSoundsApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = GoogleFonts.dmSansTextTheme();
-
     return MaterialApp(
       title: 'Sleep Sounds',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        textTheme: textTheme,
+        textTheme: GoogleFonts.dmSansTextTheme(),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF8EA8FF),
           secondary: Color(0xFF72E6C8),
@@ -58,6 +56,28 @@ class MixPreset {
   final Map<String, double> volumes;
 }
 
+class VisualPalette {
+  const VisualPalette({
+    required this.name,
+    required this.bgTop,
+    required this.bgBottom,
+    required this.surface,
+    required this.border,
+    required this.primary,
+    required this.secondary,
+    required this.mutedText,
+  });
+
+  final String name;
+  final Color bgTop;
+  final Color bgBottom;
+  final Color surface;
+  final Color border;
+  final Color primary;
+  final Color secondary;
+  final Color mutedText;
+}
+
 class SleepSoundsHomePage extends StatefulWidget {
   const SleepSoundsHomePage({super.key});
 
@@ -65,7 +85,8 @@ class SleepSoundsHomePage extends StatefulWidget {
   State<SleepSoundsHomePage> createState() => _SleepSoundsHomePageState();
 }
 
-class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
+class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
+    with SingleTickerProviderStateMixin {
   final List<SleepSound> _sounds = [
     SleepSound(
       id: 'rain',
@@ -104,6 +125,39 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
     ),
   ];
 
+  final List<VisualPalette> _palettes = const [
+    VisualPalette(
+      name: 'Aurora',
+      bgTop: Color(0xFF0B1023),
+      bgBottom: Color(0xFF171F45),
+      surface: Color(0x55202B58),
+      border: Color(0x66AAB8FF),
+      primary: Color(0xFF8EA8FF),
+      secondary: Color(0xFF72E6C8),
+      mutedText: Color(0xFFBAC1E8),
+    ),
+    VisualPalette(
+      name: 'Sunset',
+      bgTop: Color(0xFF20112A),
+      bgBottom: Color(0xFF3E1C36),
+      surface: Color(0x55B24671),
+      border: Color(0x66FFB58A),
+      primary: Color(0xFFFF9D7A),
+      secondary: Color(0xFFFFD082),
+      mutedText: Color(0xFFF4C9BF),
+    ),
+    VisualPalette(
+      name: 'Forest Night',
+      bgTop: Color(0xFF0C1A1A),
+      bgBottom: Color(0xFF153230),
+      surface: Color(0x55396F63),
+      border: Color(0x668BE4CC),
+      primary: Color(0xFF7ADBBE),
+      secondary: Color(0xFFB8F28A),
+      mutedText: Color(0xFFC6EADF),
+    ),
+  ];
+
   final Map<String, AudioPlayer> _players = {};
   final Map<String, bool> _playing = {};
   final Map<String, double> _volumes = {};
@@ -131,15 +185,26 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
     ),
   ];
 
+  late final AnimationController _breathingController;
+
   Timer? _sleepTimer;
   Timer? _fadeTimer;
   DateTime? _sleepEnd;
   Duration? _remaining;
   bool _isFading = false;
+  int _selectedPaletteIndex = 0;
+
+  VisualPalette get _palette => _palettes[_selectedPaletteIndex];
 
   @override
   void initState() {
     super.initState();
+
+    _breathingController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true);
+
     final audioContext = AudioContext(
       iOS: AudioContextIOS(
         category: AVAudioSessionCategory.playback,
@@ -226,6 +291,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
     _cancelSleepTimer();
     _sleepEnd = DateTime.now().add(duration);
     _remaining = duration;
+    _syncBreathingCadence();
 
     _sleepTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final remaining = _sleepEnd!.difference(DateTime.now());
@@ -236,6 +302,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
       }
 
       _remaining = remaining;
+      _syncBreathingCadence();
 
       if (remaining <= const Duration(seconds: 20) && !_isFading) {
         _startFadeOut();
@@ -255,6 +322,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
     _sleepEnd = null;
     _remaining = null;
     _stopFadeOut();
+    _syncBreathingCadence();
   }
 
   void _startFadeOut() {
@@ -289,6 +357,28 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
     return remaining.inSeconds / 20;
   }
 
+  void _syncBreathingCadence() {
+    final remaining = _remaining;
+    Duration nextDuration;
+
+    if (remaining == null) {
+      nextDuration = const Duration(seconds: 4);
+    } else {
+      final clampedSeconds = remaining.inSeconds.clamp(20, 3600);
+      final ms = 1800 + ((clampedSeconds / 3600) * 3600).round();
+      nextDuration = Duration(milliseconds: ms);
+    }
+
+    if (_breathingController.duration != nextDuration) {
+      _breathingController.duration = nextDuration;
+      if (_breathingController.isAnimating) {
+        _breathingController
+          ..reset()
+          ..repeat(reverse: true);
+      }
+    }
+  }
+
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -299,9 +389,26 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
     return '$minutes:$seconds';
   }
 
+  void _openNowPlaying() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NowPlayingPage(
+          palette: _palette,
+          sounds: _sounds,
+          playing: _playing,
+          volumes: _volumes,
+          onToggle: _toggleSound,
+          onSetVolume: _setVolume,
+          breathing: _breathingController,
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _cancelSleepTimer();
+    _breathingController.dispose();
     for (final player in _players.values) {
       player.dispose();
     }
@@ -313,12 +420,17 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
     final timerText = _remaining == null ? 'Off' : _formatDuration(_remaining!);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0C1022),
+      backgroundColor: _palette.bgTop,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text('Sleep Sounds'),
         actions: [
+          IconButton(
+            onPressed: _openNowPlaying,
+            icon: const Icon(Icons.dark_mode_outlined),
+            tooltip: 'Now Playing',
+          ),
           IconButton(
             onPressed: _stopAll,
             icon: const Icon(Icons.stop_circle_outlined),
@@ -328,111 +440,158 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage> {
       ),
       body: Stack(
         children: [
-          const Positioned(
+          Positioned(
             top: -70,
             right: -40,
-            child: _GlowBlob(size: 230, color: Color(0x664C6FFF)),
+            child: _GlowBlob(size: 230, color: _palette.primary.withValues(alpha: 0.35)),
           ),
-          const Positioned(
+          Positioned(
             bottom: -80,
             left: -50,
-            child: _GlowBlob(size: 250, color: Color(0x6654E3C2)),
+            child: _GlowBlob(size: 250, color: _palette.secondary.withValues(alpha: 0.35)),
           ),
-          ListView(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-            children: [
-              _PremiumHeader(
-                activeCount: _activeCount,
-                timerText: timerText,
-                fading: _isFading,
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [_palette.bgTop, _palette.bgBottom],
               ),
-              const SizedBox(height: 12),
-              _GlassCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Presets', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _presets
-                          .map(
-                            (preset) => FilledButton.tonal(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0x332A3A72),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
-                              ),
-                              onPressed: () => _applyPreset(preset),
-                              child: Text(preset.name),
+            ),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+              children: [
+                _PremiumHeader(
+                  activeCount: _activeCount,
+                  timerText: timerText,
+                  fading: _isFading,
+                  breathing: _breathingController,
+                  palette: _palette,
+                ),
+                const SizedBox(height: 12),
+                _GlassCard(
+                  palette: _palette,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Theme', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: List.generate(_palettes.length, (index) {
+                          final palette = _palettes[index];
+                          final selected = index == _selectedPaletteIndex;
+                          return ChoiceChip(
+                            label: Text(palette.name),
+                            selected: selected,
+                            onSelected: (_) => setState(() => _selectedPaletteIndex = index),
+                            backgroundColor: _palette.surface,
+                            selectedColor: palette.primary.withValues(alpha: 0.35),
+                            labelStyle: const TextStyle(color: Colors.white),
+                            side: BorderSide(
+                              color: selected ? palette.primary : _palette.border,
                             ),
-                          )
-                          .toList(),
-                    ),
-                  ],
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _GlassCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Sleep Timer', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _TimerChip(
-                          label: '15m',
-                          onTap: () => _startSleepTimer(const Duration(minutes: 15)),
-                        ),
-                        _TimerChip(
-                          label: '30m',
-                          onTap: () => _startSleepTimer(const Duration(minutes: 30)),
-                        ),
-                        _TimerChip(
-                          label: '60m',
-                          onTap: () => _startSleepTimer(const Duration(minutes: 60)),
-                        ),
-                        TextButton(
-                          onPressed: _cancelSleepTimer,
-                          child: const Text('Cancel'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Timer: $timerText'),
-                    if (_isFading && _remaining != null)
-                      const Text('Fade-out active (last 20s)'),
-                  ],
+                const SizedBox(height: 12),
+                _GlassCard(
+                  palette: _palette,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Presets', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _presets
+                            .map(
+                              (preset) => FilledButton.tonal(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _palette.primary.withValues(alpha: 0.25),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                ),
+                                onPressed: () => _applyPreset(preset),
+                                child: Text(preset.name),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              ..._sounds.map((sound) {
-                final isPlaying = _playing[sound.id] ?? false;
-                final volume = _volumes[sound.id] ?? 0.4;
+                const SizedBox(height: 12),
+                _GlassCard(
+                  palette: _palette,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Sleep Timer', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _TimerChip(
+                            label: '15m',
+                            palette: _palette,
+                            onTap: () => _startSleepTimer(const Duration(minutes: 15)),
+                          ),
+                          _TimerChip(
+                            label: '30m',
+                            palette: _palette,
+                            onTap: () => _startSleepTimer(const Duration(minutes: 30)),
+                          ),
+                          _TimerChip(
+                            label: '60m',
+                            palette: _palette,
+                            onTap: () => _startSleepTimer(const Duration(minutes: 60)),
+                          ),
+                          TextButton(
+                            onPressed: _cancelSleepTimer,
+                            child: const Text('Cancel'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Timer: $timerText'),
+                      if (_isFading && _remaining != null)
+                        const Text('Fade-out active (last 20s)'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ..._sounds.map((sound) {
+                  final isPlaying = _playing[sound.id] ?? false;
+                  final volume = _volumes[sound.id] ?? 0.4;
 
-                return _SoundCard(
-                  sound: sound,
-                  isPlaying: isPlaying,
-                  volume: volume,
-                  onToggle: () => _toggleSound(sound),
-                  onVolumeChanged: (value) => _setVolume(sound, value),
-                );
-              }),
-              const SizedBox(height: 12),
-              Text(
-                'Background playback enabled. Lock screen media controls depend on platform audio session support.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFFBAC1E8),
-                    ),
-              ),
-            ],
+                  return _SoundCard(
+                    sound: sound,
+                    isPlaying: isPlaying,
+                    volume: volume,
+                    palette: _palette,
+                    onToggle: () => _toggleSound(sound),
+                    onVolumeChanged: (value) => _setVolume(sound, value),
+                  );
+                }),
+                const SizedBox(height: 12),
+                Text(
+                  'Background playback enabled. Lock screen media controls depend on platform audio session support.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: _palette.mutedText,
+                      ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -445,11 +604,15 @@ class _PremiumHeader extends StatelessWidget {
     required this.activeCount,
     required this.timerText,
     required this.fading,
+    required this.breathing,
+    required this.palette,
   });
 
   final int activeCount;
   final String timerText;
   final bool fading;
+  final Animation<double> breathing;
+  final VisualPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -457,36 +620,51 @@ class _PremiumHeader extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xCC1B2451), Color(0xCC27346D)],
+        gradient: LinearGradient(
+          colors: [
+            palette.surface,
+            palette.bgBottom.withValues(alpha: 0.85),
+          ],
         ),
-        border: Border.all(color: const Color(0x66AAB8FF)),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Night Studio',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
+          Row(
+            children: [
+              _BreathingOrb(animation: breathing, palette: palette),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Night Studio',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    Text(
+                      'Breathing pulse synced with timer cadence',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: palette.mutedText,
+                          ),
+                    ),
+                  ],
                 ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Blend soundscapes for sleep, focus and meditation.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFFD4D9F5),
-                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _InfoPill(icon: Icons.graphic_eq, text: '$activeCount active'),
-              _InfoPill(icon: Icons.schedule, text: 'Timer $timerText'),
+              _InfoPill(icon: Icons.graphic_eq, text: '$activeCount active', palette: palette),
+              _InfoPill(icon: Icons.schedule, text: 'Timer $timerText', palette: palette),
               if (fading)
-                const _InfoPill(icon: Icons.nights_stay, text: 'Fading out'),
+                _InfoPill(icon: Icons.nights_stay, text: 'Fading out', palette: palette),
             ],
           ),
         ],
@@ -495,24 +673,58 @@ class _PremiumHeader extends StatelessWidget {
   }
 }
 
+class _BreathingOrb extends StatelessWidget {
+  const _BreathingOrb({required this.animation, required this.palette});
+
+  final Animation<double> animation;
+  final VisualPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final scale = 0.86 + (animation.value * 0.22);
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  palette.secondary,
+                  palette.primary,
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _InfoPill extends StatelessWidget {
-  const _InfoPill({required this.icon, required this.text});
+  const _InfoPill({required this.icon, required this.text, required this.palette});
 
   final IconData icon;
   final String text;
+  final VisualPalette palette;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0x339FB1FF),
+        color: palette.primary.withValues(alpha: 0.22),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFFF3F6FF)),
+          Icon(icon, size: 16, color: Colors.white),
           const SizedBox(width: 6),
           Text(text),
         ],
@@ -522,18 +734,19 @@ class _InfoPill extends StatelessWidget {
 }
 
 class _GlassCard extends StatelessWidget {
-  const _GlassCard({required this.child});
+  const _GlassCard({required this.child, required this.palette});
 
   final Widget child;
+  final VisualPalette palette;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0x44172048),
+        color: palette.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0x4DAAB8FF)),
+        border: Border.all(color: palette.border),
       ),
       child: child,
     );
@@ -541,17 +754,22 @@ class _GlassCard extends StatelessWidget {
 }
 
 class _TimerChip extends StatelessWidget {
-  const _TimerChip({required this.label, required this.onTap});
+  const _TimerChip({
+    required this.label,
+    required this.onTap,
+    required this.palette,
+  });
 
   final String label;
   final VoidCallback onTap;
+  final VisualPalette palette;
 
   @override
   Widget build(BuildContext context) {
     return OutlinedButton(
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: Color(0x66B3BEFF)),
+        side: BorderSide(color: palette.border),
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       ),
@@ -565,6 +783,7 @@ class _SoundCard extends StatelessWidget {
     required this.sound,
     required this.isPlaying,
     required this.volume,
+    required this.palette,
     required this.onToggle,
     required this.onVolumeChanged,
   });
@@ -572,6 +791,7 @@ class _SoundCard extends StatelessWidget {
   final SleepSound sound;
   final bool isPlaying;
   final double volume;
+  final VisualPalette palette;
   final VoidCallback onToggle;
   final ValueChanged<double> onVolumeChanged;
 
@@ -582,10 +802,10 @@ class _SoundCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isPlaying ? const Color(0x55202B58) : const Color(0x40161E3D),
+        color: isPlaying ? palette.surface : palette.surface.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isPlaying ? sound.color.withValues(alpha: 0.85) : const Color(0x4DAAB8FF),
+          color: isPlaying ? sound.color.withValues(alpha: 0.85) : palette.border,
         ),
       ),
       child: Column(
@@ -613,6 +833,10 @@ class _SoundCard extends StatelessWidget {
               ),
               FilledButton.tonalIcon(
                 onPressed: onToggle,
+                style: FilledButton.styleFrom(
+                  backgroundColor: palette.primary.withValues(alpha: 0.22),
+                  foregroundColor: Colors.white,
+                ),
                 icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
                 label: Text(isPlaying ? 'Pause' : 'Play'),
               ),
@@ -666,6 +890,104 @@ class _GlowBlob extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class NowPlayingPage extends StatelessWidget {
+  const NowPlayingPage({
+    super.key,
+    required this.palette,
+    required this.sounds,
+    required this.playing,
+    required this.volumes,
+    required this.onToggle,
+    required this.onSetVolume,
+    required this.breathing,
+  });
+
+  final VisualPalette palette;
+  final List<SleepSound> sounds;
+  final Map<String, bool> playing;
+  final Map<String, double> volumes;
+  final Future<void> Function(SleepSound sound) onToggle;
+  final Future<void> Function(SleepSound sound, double value) onSetVolume;
+  final Animation<double> breathing;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = sounds.where((sound) => playing[sound.id] == true).toList();
+
+    return StatefulBuilder(
+      builder: (context, setInnerState) {
+        return Scaffold(
+          backgroundColor: palette.bgTop,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            title: const Text('Now Playing'),
+          ),
+          body: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [palette.bgTop, palette.bgBottom],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  _BreathingOrb(animation: breathing, palette: palette),
+                  const SizedBox(height: 12),
+                  Text(
+                    active.isEmpty ? 'Silence mode' : 'Deep focus mode',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text(
+                    active.isEmpty
+                        ? 'Start a sound mix from the main screen.'
+                        : '${active.length} ambient tracks active',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: palette.mutedText,
+                        ),
+                  ),
+                  const SizedBox(height: 20),
+                  Expanded(
+                    child: active.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No active tracks',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          )
+                        : ListView(
+                            children: active.map((sound) {
+                              final volume = volumes[sound.id] ?? 0.4;
+                              return _SoundCard(
+                                sound: sound,
+                                isPlaying: true,
+                                volume: volume,
+                                palette: palette,
+                                onToggle: () async {
+                                  await onToggle(sound);
+                                  setInnerState(() {});
+                                },
+                                onVolumeChanged: (value) async {
+                                  await onSetVolume(sound, value);
+                                  setInnerState(() {});
+                                },
+                              );
+                            }).toList(),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
