@@ -32,6 +32,8 @@ void main() {
 
     expect(find.text('Sleep Sounds'), findsOneWidget);
     expect(find.text('Theme'), findsOneWidget);
+    expect(find.text('Quick Start'), findsOneWidget);
+    expect(find.text('Sleep now (30m)'), findsOneWidget);
     expect(find.text('Presets'), findsOneWidget);
     expect(find.text('Sleep Timer'), findsOneWidget);
     expect(find.text('Aurora'), findsOneWidget);

@@ -3,6 +3,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const SleepSoundsApp());
@@ -87,6 +88,10 @@ class SleepSoundsHomePage extends StatefulWidget {
 
 class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
     with SingleTickerProviderStateMixin {
+  static const String _paletteKey = 'sleep_palette_idx';
+  static const String _playingIdsKey = 'sleep_playing_ids';
+  static const String _volumePrefix = 'sleep_volume_';
+
   final List<SleepSound> _sounds = [
     SleepSound(
       id: 'rain',
@@ -230,6 +235,8 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
       _playing[sound.id] = false;
       _volumes[sound.id] = 0.4;
     }
+
+    unawaited(_restorePreferences());
   }
 
   int get _activeCount => _playing.values.where((isOn) => isOn).length;
@@ -240,13 +247,19 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
 
     if (isPlaying) {
       await player.stop();
-      setState(() => _playing[sound.id] = false);
+      setState(() {
+        _playing[sound.id] = false;
+      });
+      unawaited(_persistPreferences());
       return;
     }
 
     await player.setVolume(_volumes[sound.id] ?? 0.4);
     await player.play(AssetSource(sound.assetPath.replaceFirst('assets/', '')));
-    setState(() => _playing[sound.id] = true);
+    setState(() {
+      _playing[sound.id] = true;
+    });
+    unawaited(_persistPreferences());
   }
 
   Future<void> _setVolume(SleepSound sound, double value) async {
@@ -254,6 +267,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
     _volumes[sound.id] = value;
     await player.setVolume(_isFading ? value * _fadeFactor() : value);
     setState(() {});
+    unawaited(_persistPreferences());
   }
 
   Future<void> _applyPreset(MixPreset preset) async {
@@ -276,6 +290,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
       }
     }
     setState(() {});
+    unawaited(_persistPreferences());
   }
 
   Future<void> _stopAll() async {
@@ -285,6 +300,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
       _playing[sound.id] = false;
     }
     setState(() {});
+    unawaited(_persistPreferences());
   }
 
   void _startSleepTimer(Duration duration) {
@@ -314,6 +330,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
     });
 
     setState(() {});
+    unawaited(_persistPreferences());
   }
 
   void _cancelSleepTimer() {
@@ -323,6 +340,83 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
     _remaining = null;
     _stopFadeOut();
     _syncBreathingCadence();
+    unawaited(_persistPreferences());
+  }
+
+  Future<void> _quickSleep() async {
+    final quickPreset = const MixPreset(
+      name: 'Sleep now',
+      volumes: {
+        'rain': 0.40,
+        'white_noise': 0.50,
+      },
+    );
+    await _applyPreset(quickPreset);
+    _startSleepTimer(const Duration(minutes: 30));
+  }
+
+  Future<void> _restorePreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final storedPalette = prefs.getInt(_paletteKey);
+    if (storedPalette != null && storedPalette >= 0 && storedPalette < _palettes.length) {
+      _selectedPaletteIndex = storedPalette;
+    }
+
+    for (final sound in _sounds) {
+      final savedVolume = prefs.getDouble('$_volumePrefix${sound.id}');
+      if (savedVolume != null) {
+        _volumes[sound.id] = savedVolume.clamp(0.0, 1.0);
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+
+    final playingIds = prefs.getStringList(_playingIdsKey) ?? const <String>[];
+    for (final id in playingIds) {
+      SleepSound? sound;
+      for (final item in _sounds) {
+        if (item.id == id) {
+          sound = item;
+          break;
+        }
+      }
+      if (sound != null) {
+        await _startSoundIfNeeded(sound);
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _startSoundIfNeeded(SleepSound sound) async {
+    if (_playing[sound.id] == true) {
+      return;
+    }
+
+    final player = _players[sound.id]!;
+    await player.setVolume(_volumes[sound.id] ?? 0.4);
+    await player.play(AssetSource(sound.assetPath.replaceFirst('assets/', '')));
+    _playing[sound.id] = true;
+  }
+
+  Future<void> _persistPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_paletteKey, _selectedPaletteIndex);
+
+    for (final sound in _sounds) {
+      await prefs.setDouble('$_volumePrefix${sound.id}', _volumes[sound.id] ?? 0.4);
+    }
+
+    final playingIds = _playing.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    await prefs.setStringList(_playingIdsKey, playingIds);
   }
 
   void _startFadeOut() {
@@ -485,7 +579,10 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
                           return ChoiceChip(
                             label: Text(palette.name),
                             selected: selected,
-                            onSelected: (_) => setState(() => _selectedPaletteIndex = index),
+                            onSelected: (_) {
+                              setState(() => _selectedPaletteIndex = index);
+                              unawaited(_persistPreferences());
+                            },
                             backgroundColor: _palette.surface,
                             selectedColor: palette.primary.withValues(alpha: 0.35),
                             labelStyle: const TextStyle(color: Colors.white),
@@ -494,6 +591,26 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
                             ),
                           );
                         }),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _GlassCard(
+                  palette: _palette,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Quick Start', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: _quickSleep,
+                        icon: const Icon(Icons.hotel_outlined),
+                        label: const Text('Sleep now (30m)'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _palette.secondary.withValues(alpha: 0.82),
+                          foregroundColor: const Color(0xFF121421),
+                        ),
                       ),
                     ],
                   ),
