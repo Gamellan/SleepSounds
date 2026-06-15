@@ -39,11 +39,12 @@ dependencies:
   audio_session: ^0.1.21
   google_fonts: ^6.2.1
   shared_preferences: ^2.3.3
-  google_mobile_ads: ^5.3.1
+  google_mobile_ads: ^9.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.3
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -68,6 +69,13 @@ flutter:
     - assets/audio/forest.wav
     - assets/audio/fan.wav
     - assets/audio/white_noise.wav
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon/app_icon.png
+  adaptive_icon_foreground: assets/icon/app_icon.png
+  adaptive_icon_background: "#1E3A8A"
 
   # To add assets to your application, add an assets section, like this:
   # assets:
