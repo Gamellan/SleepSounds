@@ -3,10 +3,21 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await MobileAds.instance.initialize();
   runApp(const SleepSoundsApp());
+}
+
+class AdMobConfig {
+  AdMobConfig._();
+
+  // Test IDs. Replace with production IDs before release.
+  static const String appId = 'ca-app-pub-3940256099942544~3347511713';
+  static const String bannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
 }
 
 class SleepSoundsApp extends StatelessWidget {
@@ -194,6 +205,8 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
 
   Timer? _sleepTimer;
   Timer? _fadeTimer;
+  BannerAd? _bannerAd;
+  bool _bannerReady = false;
   DateTime? _sleepEnd;
   Duration? _remaining;
   bool _isFading = false;
@@ -237,6 +250,38 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
     }
 
     unawaited(_restorePreferences());
+    _loadBannerAd();
+  }
+
+  void _loadBannerAd() {
+    _bannerAd?.dispose();
+    final ad = BannerAd(
+      adUnitId: AdMobConfig.bannerAdUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _bannerReady = true;
+          });
+        },
+        onAdFailedToLoad: (ad, _) {
+          ad.dispose();
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _bannerReady = false;
+          });
+        },
+      ),
+    );
+
+    _bannerAd = ad;
+    ad.load();
   }
 
   int get _activeCount => _playing.values.where((isOn) => isOn).length;
@@ -502,6 +547,7 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
   @override
   void dispose() {
     _cancelSleepTimer();
+    _bannerAd?.dispose();
     _breathingController.dispose();
     for (final player in _players.values) {
       player.dispose();
@@ -707,6 +753,24 @@ class _SleepSoundsHomePageState extends State<SleepSoundsHomePage>
                         color: _palette.mutedText,
                       ),
                 ),
+                const SizedBox(height: 8),
+                if (_bannerReady && _bannerAd != null)
+                  Center(
+                    child: SizedBox(
+                      width: _bannerAd!.size.width.toDouble(),
+                      height: _bannerAd!.size.height.toDouble(),
+                      child: AdWidget(ad: _bannerAd!),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                if (_bannerReady)
+                  Text(
+                    'Ad',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _palette.mutedText.withValues(alpha: 0.75),
+                        ),
+                  ),
               ],
             ),
           ),
