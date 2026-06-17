@@ -8,8 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MobileAds.instance.initialize();
+  unawaited(_initializeAdsSafely());
   runApp(const SleepSoundsApp());
+}
+
+Future<void> _initializeAdsSafely() async {
+  try {
+    await MobileAds.instance.initialize();
+  } catch (_) {}
 }
 
 class AdMobConfig {
